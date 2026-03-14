@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+boto3
+langchain
+opensearch-py
+requests-aws4auth
+python-multipart
+pydantic
+python-dotenv
+numpy
+playwright

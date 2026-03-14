@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.pyc
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.env.local
+
+# Environment variables (keep .env template but not secrets)
+# .env  ← keep this to show structure
+
+# Node
+node_modules/
+npm-debug.log*
+
+# React build
+frontend/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AWS
+.aws/
+
+# Logs
+*.log
