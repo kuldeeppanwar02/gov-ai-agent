@@ -38,6 +38,7 @@ export default function App() {
   // Auto-jump to results if cached profile exists
   useEffect(() => {
     if (profile && schemes) setStep(2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
