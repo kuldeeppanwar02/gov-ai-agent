@@ -98,41 +98,60 @@ def auto_apply(scheme_name: str, profile: dict) -> dict:
 def _try_nova_act(url: str, data: dict, scheme_name: str, scheme_info: dict) -> dict:  # noqa
     """
     Try real Nova Act SDK automation.
-    Nova Act handles browser automation with natural language instructions.
+    Supports two auth methods:
+      1. AWS IAM (default) — uses existing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+      2. Nova Act API Key  — set NOVA_ACT_API_KEY in .env (optional override)
     """
     NOVA_ACT_API_KEY = os.getenv("NOVA_ACT_API_KEY", "")
+    AWS_REGION       = os.getenv("AWS_REGION", "us-east-1")
+    AWS_ACCESS_KEY   = os.getenv("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_KEY   = os.getenv("AWS_SECRET_ACCESS_KEY", "")
 
-    if not NOVA_ACT_API_KEY:
-        return {
-            "status": "⚠️ Nova Act API key not set — add NOVA_ACT_API_KEY to .env",
-            "detail": "Set NOVA_ACT_API_KEY from https://nova-act.amazon.com/"
-        }
+    steps = scheme_info.get("nova_act_steps", ["Fill the application form with user data"])
+    instruction = (
+        f"Help the user apply for the {scheme_name} government scheme. "
+        f"User profile: name={data.get('name')}, age={data.get('age')}, "
+        f"gender={data.get('gender')}, income={data.get('annual_income')}, "
+        f"state={data.get('state')}, category={data.get('category')}. "
+        "Steps: " + " | ".join(steps) +
+        " Pre-fill all form fields with the profile data above."
+    )
 
     try:
         from nova_act import NovaAct
 
-        steps = scheme_info.get("nova_act_steps", ["Fill the application form with user data"])
-        instruction = f"""
-        Help the user apply for the {scheme_name} government scheme.
-        User profile: name={data.get('name')}, age={data.get('age')},
-        gender={data.get('gender')}, income={data.get('annual_income')},
-        state={data.get('state')}, category={data.get('category')}.
+        # ── Auth Method 1: AWS IAM (preferred) ──────────────────────────
+        # Uses existing AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY from .env
+        if AWS_ACCESS_KEY and AWS_SECRET_KEY:
+            nova_kwargs = {
+                "starting_page": url,
+                "aws_access_key_id": AWS_ACCESS_KEY,
+                "aws_secret_access_key": AWS_SECRET_KEY,
+                "aws_region": AWS_REGION,
+                "headless": True,
+            }
+            auth_used = "AWS IAM"
 
-        Steps to follow:
-        {chr(10).join(f'- {s}' for s in steps)}
+        # ── Auth Method 2: Nova Act API Key (optional override) ──────────
+        elif NOVA_ACT_API_KEY:
+            nova_kwargs = {
+                "starting_page": url,
+                "api_key": NOVA_ACT_API_KEY,
+                "headless": True,
+            }
+            auth_used = "Nova Act API Key"
 
-        Pre-fill all form fields using the profile data above.
-        """
-
-        with NovaAct(
-            starting_page=url,
-            api_key=NOVA_ACT_API_KEY,
-            headless=True
-        ) as agent:
-            result = agent.act(instruction)
-            detail_text = str(result) if result else "Form submitted successfully"
+        else:
             return {
-                "status": "✅ Nova Act automated form filling complete",
+                "status": "⚠️ No auth configured",
+                "detail": "Add AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY to .env"
+            }
+
+        with NovaAct(**nova_kwargs) as agent:
+            result = agent.act(instruction)
+            detail_text = str(result) if result else "Form filled successfully"
+            return {
+                "status": f"✅ Nova Act complete (auth: {auth_used})",
                 "detail": detail_text[:300]
             }
 
@@ -142,8 +161,8 @@ def _try_nova_act(url: str, data: dict, scheme_name: str, scheme_info: dict) -> 
             "detail": "Run: pip install nova-act"
         }
     except Exception as e:
-        # Fallback to Playwright verification
         return _try_playwright_verify(url, e)
+
 
 
 def _try_playwright_verify(url: str, prev_error: Exception) -> dict:
