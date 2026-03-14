@@ -1,6 +1,7 @@
 fastapi
 uvicorn
-boto3
+boto3>=1.35.0
+botocore>=1.35.0
 langchain
 opensearch-py
 requests-aws4auth
@@ -12,4 +13,3 @@ playwright
 nova-act
 pdfplumber
 Pillow
-urllib3<2
