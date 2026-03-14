@@ -9,3 +9,6 @@ pydantic
 python-dotenv
 numpy
 playwright
+nova-act
+pdfplumber
+Pillow

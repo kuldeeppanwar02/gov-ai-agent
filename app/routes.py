@@ -1,11 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import boto3
 import json
 
 from app.services.s3_service import upload_to_s3
-from app.agents.profile_agent import extract_profile
+from app.agents.profile_agent import (
+    extract_profile_from_text,
+    extract_profile_from_image,
+    extract_profile_from_pdf,
+)
 from app.agents.eligibility_agent import check_eligibility
 from app.agents.application_agent import auto_apply
 from app.services.rag_service import get_all_schemes
@@ -14,40 +17,68 @@ from app.config import AWS_REGION, NOVA_LITE_MODEL_ID
 router = APIRouter()
 bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
 
+# Supported file types
+IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+PDF_TYPE = "application/pdf"
+
 
 # ─────────────────────────────────────────────
-#  POST /upload — Main pipeline
+#  POST /upload — Multimodal-aware pipeline
 # ─────────────────────────────────────────────
 @router.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
+    """
+    Accepts text (.txt), images (.jpg/.png — Aadhaar, income cert photos),
+    and PDFs. Automatically routes to the correct extractor.
+    """
     try:
-        # 1. Read file content
         content = await file.read()
-        try:
-            text_content = content.decode("utf-8")
-        except Exception:
-            text_content = content.decode("latin-1")
+        content_type = file.content_type or ""
+        filename = file.filename or ""
 
-        if len(text_content.strip()) < 10:
-            raise HTTPException(status_code=400, detail="Document is too short or empty.")
+        # Detect file type
+        is_image = (
+            content_type in IMAGE_TYPES
+            or filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+        )
+        is_pdf = (
+            content_type == PDF_TYPE
+            or filename.lower().endswith(".pdf")
+        )
 
-        # 2. Upload to S3
+        # ── Route to correct extractor ──────
+        if is_image:
+            profile = extract_profile_from_image(content, content_type or "image/jpeg")
+            input_mode = "image (Nova Lite Multimodal)"
+        elif is_pdf:
+            profile = extract_profile_from_pdf(content)
+            input_mode = "pdf (pdfplumber + Nova Lite)"
+        else:
+            # Plain text
+            try:
+                text_content = content.decode("utf-8")
+            except Exception:
+                text_content = content.decode("latin-1")
+            if len(text_content.strip()) < 5:
+                raise HTTPException(status_code=400, detail="Document is too short or empty.")
+            profile = extract_profile_from_text(text_content)
+            input_mode = "text (Nova Lite)"
+
+        # Upload to S3
         file.file.seek(0)
         try:
             s3_url = upload_to_s3(file)
         except Exception as e:
             s3_url = f"s3-upload-skipped: {str(e)[:60]}"
 
-        # 3. Extract profile via Nova Lite
-        profile = extract_profile(text_content)
-
-        # 4. Check eligibility via Nova Lite + RAG
+        # Check eligibility
         eligible_schemes = check_eligibility(profile)
 
         return {
             "profile": profile,
             "eligible_schemes": eligible_schemes,
             "s3_url": s3_url,
+            "input_mode": input_mode,
             "total_schemes_found": len(eligible_schemes)
         }
 
@@ -58,7 +89,7 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 # ─────────────────────────────────────────────
-#  POST /apply — Auto-apply to a scheme
+#  POST /apply — Nova Act auto-apply
 # ─────────────────────────────────────────────
 class ApplyRequest(BaseModel):
     scheme_name: str
@@ -75,7 +106,7 @@ async def apply_to_scheme(request: ApplyRequest):
 
 
 # ─────────────────────────────────────────────
-#  POST /chat — Ask Nova about schemes
+#  POST /chat — Nova Lite Q&A
 # ─────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message: str
@@ -87,23 +118,21 @@ async def chat_with_nova(request: ChatRequest):
     try:
         context = ""
         if request.profile:
-            context = f"""
-User profile context:
-- Age: {request.profile.get('age')}
-- Gender: {request.profile.get('gender')}
-- Income: Rs {request.profile.get('income')}
-- Location: {request.profile.get('location')}
-- Occupation: {request.profile.get('occupation')}
-- Category: {request.profile.get('category')}
-"""
+            context = (
+                f"\nUser profile context: Age={request.profile.get('age')}, "
+                f"Gender={request.profile.get('gender')}, "
+                f"Income=₹{request.profile.get('income')}, "
+                f"State={request.profile.get('location')}, "
+                f"Occupation={request.profile.get('occupation')}, "
+                f"Category={request.profile.get('category')}.\n"
+            )
 
-        prompt = f"""You are a helpful AI assistant specializing in Indian government welfare schemes and benefits.
-You help citizens understand and navigate government schemes, eligibility, and application processes.
+        prompt = f"""You are a helpful AI assistant specializing in Indian government welfare schemes.
+Help citizens understand eligibility, benefits, application process, and required documents.
 {context}
-Answer the following question clearly and helpfully. If relevant, mention specific scheme names, eligibility criteria, and how to apply.
+Answer clearly. Mention specific scheme names and steps where relevant.
 
-Question: {request.message}
-"""
+Question: {request.message}"""
 
         response = bedrock.invoke_model(
             modelId=NOVA_LITE_MODEL_ID,
@@ -111,15 +140,11 @@ Question: {request.message}
             accept="application/json",
             body=json.dumps({
                 "messages": [{"role": "user", "content": [{"text": prompt}]}],
-                "inferenceConfig": {
-                    "maxTokens": 800,
-                    "temperature": 0.7,
-                    "topP": 0.9
-                }
+                "inferenceConfig": {"maxTokens": 800, "temperature": 0.7, "topP": 0.9}
             })
         )
-        response_body = json.loads(response["body"].read())
-        answer = response_body["output"]["message"]["content"][0]["text"]
+        rb = json.loads(response["body"].read())
+        answer = rb["output"]["message"]["content"][0]["text"]
         return {"reply": answer}
 
     except Exception as e:
@@ -127,9 +152,17 @@ Question: {request.message}
 
 
 # ─────────────────────────────────────────────
-#  GET /schemes — List all available schemes
+#  GET /schemes — All schemes in database
 # ─────────────────────────────────────────────
 @router.get("/schemes")
 async def list_all_schemes():
     schemes = get_all_schemes()
     return {"total": len(schemes), "schemes": schemes}
+
+
+# ─────────────────────────────────────────────
+#  GET /health — Quick health check
+# ─────────────────────────────────────────────
+@router.get("/health")
+async def health():
+    return {"status": "ok", "nova_model": NOVA_LITE_MODEL_ID}
