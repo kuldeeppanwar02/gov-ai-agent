@@ -1,7 +1,8 @@
+```
 import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
 
-const API = "http://localhost:8000";
+const API = process.env.REACT_APP_API_URL || "https://gov-ai-agent.onrender.com";
 const PRIORITY_COLOR = { High: "#22c55e", Medium: "#f59e0b", Low: "#94a3b8" };
 const CATEGORY_ICON = {
   "Agriculture": "🌾", "Health": "🏥", "Education": "📚", "Housing": "🏠",
