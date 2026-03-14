@@ -12,3 +12,4 @@ playwright
 nova-act
 pdfplumber
 Pillow
+urllib3<2
