@@ -3,13 +3,11 @@ uvicorn
 boto3>=1.35.0
 botocore>=1.35.0
 langchain
-opensearch-py
 requests-aws4auth
 python-multipart
 pydantic
 python-dotenv
 numpy
 playwright
-nova-act
 pdfplumber
 Pillow
