@@ -36,33 +36,29 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
 # Centralized Bedrock Client
 def get_bedrock_client():
-    """Returns a centralized bedrock-runtime client with explicit credentials."""
+    """Returns a centralized bedrock-runtime client with explicit or IAM credentials."""
     print(f"🔧 Initializing Bedrock client in region: {AWS_REGION}")
     
-    # Logic to handle empty env vars (os.getenv returns empty string, not None)
+    # Logic to handle empty env vars (supports IAM Roles if keys are missing)
     key_id = AWS_ACCESS_KEY_ID if AWS_ACCESS_KEY_ID else None
     secret = AWS_SECRET_ACCESS_KEY if AWS_SECRET_ACCESS_KEY else None
     
-    # Diagnostic logging (Safe/Masked)
-    if key_id:
-        masked_id = f"{key_id[:4]}...{key_id[-4:]}"
-        print(f"🔑 AWS_ACCESS_KEY_ID: {masked_id} (Length: {len(key_id)})")
-    else:
-        print("⚠️ AWS_ACCESS_KEY_ID is NOT_SET or EMPTY")
-
-    if secret:
-        print(f"🔐 AWS_SECRET_ACCESS_KEY: (Length: {len(secret)})")
-        if len(secret) != 40:
-            print(f"🚨 WARNING: AWS Secret Key length is {len(secret)}, expected 40. Please check for extra/missing characters.")
-    else:
-        print("⚠️ AWS_SECRET_ACCESS_KEY is NOT_SET or EMPTY")
+    # Setup kwargs for boto3
+    client_kwargs = {
+        "region_name": AWS_REGION
+    }
     
-    return boto3.client(
-        "bedrock-runtime",
-        region_name=AWS_REGION,
-        aws_access_key_id=key_id,
-        aws_secret_access_key=secret,
-    )
+    # Only add credentials if they were explicitly provided (e.g. for Render)
+    # If None, boto3 will automatically use IAM Instance Roles (for App Runner)
+    if key_id and secret:
+        client_kwargs["aws_access_key_id"] = key_id
+        client_kwargs["aws_secret_access_key"] = secret
+        masked_id = f"{key_id[:4]}...{key_id[-4:]}"
+        print(f"🔑 Using explicit credentials: {masked_id} (Length: {len(key_id)})")
+    else:
+        print("🛡️ No explicit keys found. Using IAM Instance Role / Default Provider Chain.")
+    
+    return boto3.client("bedrock-runtime", **client_kwargs)
 
 # Singleton instance
 bedrock_client = get_bedrock_client()
