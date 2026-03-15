@@ -1,10 +1,8 @@
 import boto3
 import json
 import re
-from app.config import AWS_REGION, NOVA_LITE_MODEL_ID, bedrock_client
+from app.config import AWS_REGION, NOVA_LITE_MODEL_ID, bedrock_invoke
 from app.services.rag_service import find_matching_schemes
-
-bedrock = bedrock_client
 
 
 def check_eligibility(profile: dict) -> list[dict]:
@@ -62,22 +60,16 @@ If no schemes match, return an empty array: []
 """
 
     try:
-        response = bedrock.invoke_model(
-            modelId=NOVA_LITE_MODEL_ID,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps({
-                "messages": [{"role": "user", "content": [{"text": prompt}]}],
-                "inferenceConfig": {
-                    "maxTokens": 1500,
-                    "temperature": 0.2,
-                    "topP": 0.9
-                }
-            })
-        )
+        result = bedrock_invoke(NOVA_LITE_MODEL_ID, {
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {
+                "maxTokens": 1500,
+                "temperature": 0.2,
+                "topP": 0.9
+            }
+        })
 
-        response_body = json.loads(response["body"].read())
-        output_text = response_body["output"]["message"]["content"][0]["text"]
+        output_text = result["output"]["message"]["content"][0]["text"]
         print("🤖 Nova Eligibility Output:", output_text[:500])
 
         # Extract JSON array from response

@@ -2,10 +2,7 @@ import boto3
 import json
 import re
 import base64
-from app.config import AWS_REGION, NOVA_LITE_MODEL_ID, bedrock_client
-
-bedrock = bedrock_client
-
+from app.config import AWS_REGION, NOVA_LITE_MODEL_ID, bedrock_invoke
 
 def extract_profile_from_text(document_text: str) -> dict:
     """Extract profile from plain text using Nova Lite."""
@@ -20,11 +17,8 @@ def extract_profile_from_image(image_bytes: bytes, media_type: str = "image/jpeg
     """
     image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
-    response = bedrock.invoke_model(
-        modelId=NOVA_LITE_MODEL_ID,
-        contentType="application/json",
-        accept="application/json",
-        body=json.dumps({
+    try:
+        result = bedrock_invoke(NOVA_LITE_MODEL_ID, {
             "messages": [
                 {
                     "role": "user",
@@ -32,29 +26,21 @@ def extract_profile_from_image(image_bytes: bytes, media_type: str = "image/jpeg
                         {
                             "image": {
                                 "format": media_type.split("/")[-1],  # jpeg / png
-                                "source": {
-                                    "bytes": image_b64
-                                }
+                                "source": {"bytes": image_b64}
                             }
                         },
-                        {
-                            "text": _build_extraction_prompt("(See the image provided above)")
-                        }
+                        {"text": _build_extraction_prompt("(See the image provided above)")}
                     ]
                 }
             ],
-            "inferenceConfig": {
-                "maxTokens": 500,
-                "temperature": 0.1,
-                "topP": 0.9
-            }
+            "inferenceConfig": {"maxTokens": 500, "temperature": 0.1, "topP": 0.9}
         })
-    )
-
-    response_body = json.loads(response["body"].read())
-    output_text = response_body["output"]["message"]["content"][0]["text"]
-    print("📸 Nova Multimodal Output:", output_text)
-    return _parse_json(output_text)
+        output_text = result["output"]["message"]["content"][0]["text"]
+        print("📸 Nova Multimodal Output:", output_text)
+        return _parse_json(output_text)
+    except Exception as e:
+        print(f"⚠️ Image extraction failed: {e}")
+        return _empty_profile()
 
 
 def extract_profile_from_pdf(pdf_bytes: bytes) -> dict:
@@ -112,17 +98,11 @@ Return ONLY valid JSON — no explanation, no markdown:
 
 def _call_nova(prompt: str) -> dict:
     try:
-        response = bedrock.invoke_model(
-            modelId=NOVA_LITE_MODEL_ID,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps({
-                "messages": [{"role": "user", "content": [{"text": prompt}]}],
-                "inferenceConfig": {"maxTokens": 400, "temperature": 0.1, "topP": 0.9}
-            })
-        )
-        response_body = json.loads(response["body"].read())
-        output_text = response_body["output"]["message"]["content"][0]["text"]
+        result = bedrock_invoke(NOVA_LITE_MODEL_ID, {
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {"maxTokens": 400, "temperature": 0.1, "topP": 0.9}
+        })
+        output_text = result["output"]["message"]["content"][0]["text"]
         print("📄 Nova Profile Output:", output_text[:200])
         return _parse_json(output_text)
     except Exception as e:

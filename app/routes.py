@@ -1,6 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
-import boto3
 import json
 
 from app.services.s3_service import upload_to_s3
@@ -12,10 +11,10 @@ from app.agents.profile_agent import (
 from app.agents.eligibility_agent import check_eligibility
 from app.agents.application_agent import auto_apply
 from app.services.rag_service import get_all_schemes
-from app.config import bedrock_client, NOVA_LITE_MODEL_ID
+from app.config import bedrock_invoke, NOVA_LITE_MODEL_ID
 
 router = APIRouter()
-bedrock = bedrock_client
+
 
 # Supported file types
 IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
@@ -134,17 +133,11 @@ Answer clearly. Mention specific scheme names and steps where relevant.
 
 Question: {request.message}"""
 
-        response = bedrock.invoke_model(
-            modelId=NOVA_LITE_MODEL_ID,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps({
-                "messages": [{"role": "user", "content": [{"text": prompt}]}],
-                "inferenceConfig": {"maxTokens": 800, "temperature": 0.7, "topP": 0.9}
-            })
-        )
-        rb = json.loads(response["body"].read())
-        answer = rb["output"]["message"]["content"][0]["text"]
+        result = bedrock_invoke(NOVA_LITE_MODEL_ID, {
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {"maxTokens": 800, "temperature": 0.7, "topP": 0.9}
+        })
+        answer = result["output"]["message"]["content"][0]["text"]
         return {"reply": answer}
 
     except Exception as e:
@@ -185,16 +178,11 @@ async def debug_aws():
     }
     
     try:
-        # Simple probe: try to invoke model with minimal tokens
-        bedrock.invoke_model(
-            modelId=NOVA_LITE_MODEL_ID,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps({
-                "messages": [{"role": "user", "content": [{"text": "ping"}]}],
-                "inferenceConfig": {"maxTokens": 1}
-            })
-        )
+        # Probe using bedrock_invoke (bypasses botocore double-encoding bug)
+        bedrock_invoke(NOVA_LITE_MODEL_ID, {
+            "messages": [{"role": "user", "content": [{"text": "ping"}]}],
+            "inferenceConfig": {"maxTokens": 1}
+        })
         results["can_list_models"] = True
     except Exception as e:
         results["connection_error"] = str(e)
