@@ -1,13 +1,8 @@
 import boto3
 import json
-from app.config import AWS_REGION, TITAN_EMBED_MODEL_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+from app.config import TITAN_EMBED_MODEL_ID, bedrock_client
 
-bedrock = boto3.client(
-    "bedrock-runtime",
-    region_name=AWS_REGION,
-    aws_access_key_id=AWS_ACCESS_KEY_ID if AWS_ACCESS_KEY_ID else None,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY if AWS_SECRET_ACCESS_KEY else None,
-)
+bedrock = bedrock_client
 
 
 def embed_text(text: str) -> list[float]:

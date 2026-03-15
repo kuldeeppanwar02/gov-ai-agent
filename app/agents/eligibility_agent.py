@@ -1,15 +1,10 @@
 import boto3
 import json
 import re
-from app.config import AWS_REGION, NOVA_LITE_MODEL_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+from app.config import AWS_REGION, NOVA_LITE_MODEL_ID, bedrock_client
 from app.services.rag_service import find_matching_schemes
 
-bedrock = boto3.client(
-    "bedrock-runtime", 
-    region_name=AWS_REGION,
-    aws_access_key_id=AWS_ACCESS_KEY_ID if AWS_ACCESS_KEY_ID else None,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY if AWS_SECRET_ACCESS_KEY else None
-)
+bedrock = bedrock_client
 
 
 def check_eligibility(profile: dict) -> list[dict]:

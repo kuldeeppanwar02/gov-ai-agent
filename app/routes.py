@@ -12,10 +12,10 @@ from app.agents.profile_agent import (
 from app.agents.eligibility_agent import check_eligibility
 from app.agents.application_agent import auto_apply
 from app.services.rag_service import get_all_schemes
-from app.config import AWS_REGION, NOVA_LITE_MODEL_ID
+from app.config import bedrock_client, NOVA_LITE_MODEL_ID
 
 router = APIRouter()
-bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+bedrock = bedrock_client
 
 # Supported file types
 IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
