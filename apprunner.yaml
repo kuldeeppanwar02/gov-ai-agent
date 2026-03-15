@@ -1,10 +1,18 @@
 version: 1.0
-runtime: docker
+runtime: python311
 build:
   commands:
-    build: docker build -t gov-ai-agent .
+    pre-build:
+      - pip install --upgrade pip
+    build:
+      - pip install -r gov-ai-agent/requirements.txt
+      - python -m playwright install chromium
+      - python -m playwright install-deps chromium
 run:
-  runtime-version: docker
-  command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+  command: cd gov-ai-agent && uvicorn app.main:app --host 0.0.0.0 --port 8000
   network:
     port: 8000
+    env: PORT
+  env:
+    - name: PYTHONPATH
+      value: /app/gov-ai-agent
