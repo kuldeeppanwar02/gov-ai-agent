@@ -166,3 +166,37 @@ async def list_all_schemes():
 @router.get("/health")
 async def health():
     return {"status": "ok", "nova_model": NOVA_LITE_MODEL_ID}
+
+
+# ─────────────────────────────────────────────
+#  GET /debug/aws — Connection Diagnostic
+# ─────────────────────────────────────────────
+@router.get("/debug/aws")
+async def debug_aws():
+    """Diagnostic tool to verify AWS credentials and Bedrock connection."""
+    from app.config import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+    
+    results = {
+        "region": AWS_REGION,
+        "access_key_masked": f"{AWS_ACCESS_KEY_ID[:4]}...{AWS_ACCESS_KEY_ID[-4:]}" if AWS_ACCESS_KEY_ID else "NOT_SET",
+        "secret_key_length": len(AWS_SECRET_ACCESS_KEY) if AWS_SECRET_ACCESS_KEY else 0,
+        "can_list_models": False,
+        "connection_error": None
+    }
+    
+    try:
+        # Simple probe: try to invoke model with minimal tokens
+        bedrock.invoke_model(
+            modelId=NOVA_LITE_MODEL_ID,
+            contentType="application/json",
+            accept="application/json",
+            body=json.dumps({
+                "messages": [{"role": "user", "content": [{"text": "ping"}]}],
+                "inferenceConfig": {"maxTokens": 1}
+            })
+        )
+        results["can_list_models"] = True
+    except Exception as e:
+        results["connection_error"] = str(e)
+        
+    return results

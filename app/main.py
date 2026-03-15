@@ -25,12 +25,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS — configurable via .env
-origins = CORS_ORIGINS if CORS_ORIGINS != ["*"] else ["*"]
+# CORS — robust handling for wildcard and specific origins
+origins = CORS_ORIGINS
+allow_all = "*" in origins or origins == ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=not allow_all,  # Credentials NOT allowed with "*" in FastAPI
     allow_methods=["*"],
     allow_headers=["*"],
 )

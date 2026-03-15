@@ -4,10 +4,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def _clean_var(name: str, default: str = "") -> str:
+    """Robustly clean environment variables: strip quotes, spaces, and hidden line endings."""
+    val = os.getenv(name, default)
+    if not val:
+        return ""
+    # Remove quotes, newlines, tabs, and spaces
+    return val.strip().strip('"').strip("'").replace("\r", "").replace("\n", "").replace("\t", "").strip()
+
 # AWS Settings
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1").strip().strip('"').strip("'")
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "").strip().strip('"').strip("'")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip().strip('"').strip("'")
+AWS_REGION = _clean_var("AWS_REGION", "us-east-1")
+AWS_ACCESS_KEY_ID = _clean_var("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = _clean_var("AWS_SECRET_ACCESS_KEY")
 
 # S3
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "gov-ai-agent-bucket")
@@ -29,17 +37,31 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 # Centralized Bedrock Client
 def get_bedrock_client():
     """Returns a centralized bedrock-runtime client with explicit credentials."""
-    print(f"🔧 Initializing Bedrock client in {AWS_REGION}...")
+    print(f"🔧 Initializing Bedrock client in region: {AWS_REGION}")
     
-    # Debug: Masked keys to verify they are loaded
-    masked_key = f"{AWS_ACCESS_KEY_ID[:4]}...{AWS_ACCESS_KEY_ID[-4:]}" if len(AWS_ACCESS_KEY_ID) > 8 else "NOT_SET"
-    print(f"🔑 AWS_ACCESS_KEY_ID: {masked_key}")
+    # Logic to handle empty env vars (os.getenv returns empty string, not None)
+    key_id = AWS_ACCESS_KEY_ID if AWS_ACCESS_KEY_ID else None
+    secret = AWS_SECRET_ACCESS_KEY if AWS_SECRET_ACCESS_KEY else None
+    
+    # Diagnostic logging (Safe/Masked)
+    if key_id:
+        masked_id = f"{key_id[:4]}...{key_id[-4:]}"
+        print(f"🔑 AWS_ACCESS_KEY_ID: {masked_id} (Length: {len(key_id)})")
+    else:
+        print("⚠️ AWS_ACCESS_KEY_ID is NOT_SET or EMPTY")
+
+    if secret:
+        print(f"🔐 AWS_SECRET_ACCESS_KEY: (Length: {len(secret)})")
+        if len(secret) != 40:
+            print(f"🚨 WARNING: AWS Secret Key length is {len(secret)}, expected 40. Please check for extra/missing characters.")
+    else:
+        print("⚠️ AWS_SECRET_ACCESS_KEY is NOT_SET or EMPTY")
     
     return boto3.client(
         "bedrock-runtime",
         region_name=AWS_REGION,
-        aws_access_key_id=AWS_ACCESS_KEY_ID if AWS_ACCESS_KEY_ID else None,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY if AWS_SECRET_ACCESS_KEY else None,
+        aws_access_key_id=key_id,
+        aws_secret_access_key=secret,
     )
 
 # Singleton instance
