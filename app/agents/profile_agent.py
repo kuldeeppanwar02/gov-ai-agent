@@ -2,9 +2,14 @@ import boto3
 import json
 import re
 import base64
-from app.config import AWS_REGION, NOVA_LITE_MODEL_ID
+from app.config import AWS_REGION, NOVA_LITE_MODEL_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
-bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+bedrock = boto3.client(
+    "bedrock-runtime", 
+    region_name=AWS_REGION,
+    aws_access_key_id=AWS_ACCESS_KEY_ID if AWS_ACCESS_KEY_ID else None,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY if AWS_SECRET_ACCESS_KEY else None
+)
 
 
 def extract_profile_from_text(document_text: str) -> dict:
